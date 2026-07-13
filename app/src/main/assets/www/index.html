@@ -1,0 +1,1531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Trap Devil</title>
+
+<!-- PWA: makes the game installable as a real app on phones, tablets, and laptops -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0d0d1f">
+<meta name="background-color" content="#0d0d1f">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+<!-- iOS "Add to Home Screen" support (iOS ignores manifest.json for some of this) -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Trap Devil">
+<meta name="mobile-web-app-capable" content="yes">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-user-select:none; user-select:none; }
+  html,body { height:100%; background:#0d0d1f; font-family:'Segoe UI',Arial,sans-serif; overflow:hidden; }
+
+  #gameWrapper {
+    position:fixed; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    background:#0d0d1f;
+  }
+  #game {
+    display:block;
+    background:#16213e;
+    touch-action:none;
+    border-radius:8px;
+    box-shadow:0 0 40px rgba(233,69,96,.25);
+    max-width:100%;
+    max-height:100%;
+  }
+
+  .screen {
+    position:fixed; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; color:#fff; text-align:center;
+    background:radial-gradient(circle at 50% 30%,#23234a,#0d0d1f 70%); transition:opacity .3s;
+    padding:env(safe-area-inset-top, 20px) env(safe-area-inset-right, 20px) env(safe-area-inset-bottom, 20px) env(safe-area-inset-left, 20px);
+    overflow-y:auto;
+    z-index:10;
+  }
+  .hidden { display:none !important; }
+  h1 {
+    font-size:clamp(28px, 8vw, 52px); margin-bottom:10px; color:#e94560;
+    text-shadow:0 0 30px rgba(233,69,96,.7), 0 0 8px rgba(255,255,255,.3);
+    letter-spacing:4px; animation:pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+  @keyframes floaty { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+  .sub { color:#9aa; margin-bottom:20px; font-style:italic; font-size:clamp(12px,3vw,16px); }
+  button {
+    background:linear-gradient(180deg,#ff5c7a,#e94560); color:#fff; border:none;
+    padding:14px 40px; font-size:clamp(15px,4vw,20px); border-radius:12px; cursor:pointer; margin:6px;
+    transition:transform .15s, box-shadow .2s; box-shadow:0 5px 0 #b32d45, 0 8px 20px rgba(233,69,96,.4);
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:hover { transform:translateY(-2px); box-shadow:0 7px 0 #b32d45, 0 12px 24px rgba(233,69,96,.5); }
+  button:active { transform:translateY(3px); box-shadow:0 2px 0 #b32d45; }
+  .small { padding:10px 24px; font-size:clamp(12px,3.5vw,16px); }
+  #hud {
+    position:fixed; top:0; left:0; right:0; display:flex; justify-content:space-between;
+    padding:env(safe-area-inset-top, 8px) 12px 6px 12px;
+    color:#fff; font-size:clamp(12px,3vw,18px); pointer-events:none; z-index:5; flex-wrap:wrap; gap:4px;
+    background:rgba(0,0,0,0.2);
+  }
+  #hud .pill { background:rgba(0,0,0,.5); padding:4px 10px; border-radius:20px; pointer-events:auto; backdrop-filter:blur(4px); box-shadow:0 2px 8px rgba(0,0,0,.3); font-size:clamp(10px,2.5vw,16px); }
+  #hud .boss { background:rgba(180,30,60,.6); animation:pulse 1.2s infinite; }
+  #hud button { padding:4px 10px; font-size:clamp(10px,2.5vw,14px); box-shadow:0 2px 0 #b32d45; pointer-events:auto; margin:0; }
+  #hint {
+    position:fixed; top:clamp(44px,10vw,60px); left:0; right:0; text-align:center; color:#ffd86b;
+    font-size:clamp(11px,2.8vw,14px); z-index:5; pointer-events:none; text-shadow:0 1px 4px #000;
+    animation:floaty 3s ease-in-out infinite;
+  }
+  #levelGrid {
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(44px, 1fr));
+    gap:6px; width:min(560px, 92vw); max-height:55vh; overflow-y:auto; padding:10px;
+  }
+  .lvBtn { padding:8px 0; font-size:clamp(11px,3vw,14px); box-shadow:0 3px 0 #b32d45; }
+  .lvBtn.boss { background:linear-gradient(180deg,#b22,#700); box-shadow:0 3px 0 #500; }
+  .lvBtn.cleared { outline:2px solid #4ad991; }
+  .lvBtn.locked { background:linear-gradient(180deg,#555,#333); box-shadow:0 3px 0 #222; opacity:0.55; cursor:not-allowed; }
+  .lvBtn.locked:hover { transform:none; box-shadow:0 3px 0 #222; }
+  .controls-hint { color:#889; margin-top:16px; font-size:clamp(10px,2.5vw,14px); line-height:1.7; max-width:500px; }
+  #deathText {
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    color:#fff; font-size:clamp(20px,6vw,30px); font-weight:bold; z-index:7; pointer-events:none;
+    text-shadow:0 0 20px #e94560, 0 2px 6px #000; opacity:0; transition:opacity .2s;
+  }
+  .setRow { display:flex; align-items:center; justify-content:space-between; width:min(300px,85vw); max-width:80vw; margin:8px 0; background:rgba(0,0,0,.3); padding:10px 16px; border-radius:12px; }
+  .setRow span { font-size:clamp(13px,3.5vw,16px); }
+  .vol { display:flex; align-items:center; gap:8px; }
+  .vol b { min-width:42px; text-align:center; font-size:clamp(12px,3vw,16px); }
+  .vbtn { padding:6px 14px; font-size:18px; margin:0; box-shadow:0 3px 0 #b32d45; }
+
+  /* Touch controls */
+  #touch {
+    position:fixed;
+    bottom:0;
+    left:0; right:0;
+    display:none;
+    justify-content:space-between;
+    padding:10px 18px;
+    padding-bottom:max(env(safe-area-inset-bottom, 10px), 10px);
+    z-index:6;
+    align-items:flex-end;
+    pointer-events:none;
+  }
+  .ctrlBtn {
+    width:clamp(72px,20vw,100px);
+    height:clamp(72px,20vw,100px);
+    border-radius:50%; padding:0;
+    font-size:clamp(24px,6.5vw,34px); margin:5px;
+    box-shadow:0 5px 0 #b32d45;
+    display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(180deg,#ff5c7a,#e94560);
+    border:none; color:#fff; cursor:pointer;
+    -webkit-tap-highlight-color: transparent;
+    pointer-events:auto;
+    opacity:0.9;
+  }
+  .ctrlBtn:active { transform:translateY(3px); box-shadow:0 1px 0 #b32d45; }
+  .ctrlBtn.gun {
+    width:clamp(78px,21vw,105px);
+    height:clamp(78px,21vw,105px);
+    font-size:clamp(26px,7vw,36px);
+    background:linear-gradient(180deg,#ffd34d,#f5a623);
+    box-shadow:0 5px 0 #b37a00;
+  }
+  .ctrlBtn.jump {
+    width:clamp(84px,23vw,116px);
+    height:clamp(84px,23vw,116px);
+    font-size:clamp(28px,7.5vw,38px);
+  }
+  #leftControls { display:flex; gap:14px; align-items:flex-end; }
+  #rightControls { display:flex; gap:14px; align-items:flex-end; }
+
+  /* Rotate-to-landscape prompt (mobile only) */
+  #rotateOverlay {
+    position:fixed; inset:0; z-index:9999;
+    background:#0d0d1f;
+    display:none; flex-direction:column; align-items:center; justify-content:center;
+    color:#fff; text-align:center; padding:20px;
+  }
+  #rotateOverlay.show { display:flex; }
+  #rotateOverlay .icon { font-size:56px; margin-bottom:14px; animation:rotateHint 1.6s ease-in-out infinite; }
+  #rotateOverlay h2 { font-size:clamp(18px,5vw,26px); color:#e94560; margin-bottom:8px; letter-spacing:2px; }
+  #rotateOverlay p { color:#9aa; font-size:clamp(12px,3.5vw,16px); }
+  @keyframes rotateHint { 0%,100%{ transform:rotate(0deg); } 50%{ transform:rotate(90deg); } }
+</style>
+</head>
+<body>
+
+<!-- Rotate device prompt (shown automatically on mobile when in portrait) -->
+<div id="rotateOverlay">
+  <div class="icon">📱</div>
+  <h2>ROTATE YOUR DEVICE</h2>
+  <p>Trap Devil plays in fullscreen landscape mode</p>
+</div>
+
+<!-- MAIN MENU -->
+<div id="menu" class="screen">
+  <h1>TRAP DEVIL</h1>
+  <p class="sub">Trust nothing. The floor lies. 😈</p>
+  <button onclick="startFromSaved()">PLAY</button>
+  <button class="small" onclick="showLevels()">LEVEL SELECT</button>
+  <button class="small" onclick="showSettings()">SETTINGS</button>
+  <button class="small" onclick="resetProgress()">RESET PROGRESS</button>
+  <button class="small" id="installBtn" style="display:none;" onclick="installApp()">📲 INSTALL APP</button>
+  <p class="sub" id="iosInstallHint" style="display:none;font-size:12px;max-width:320px;">
+    To install: tap the Share icon in Safari, then "Add to Home Screen".
+  </p>
+  <p class="controls-hint">
+    ⬅️ ➡️ / A D move &nbsp;•&nbsp; ⬆️ / W / SPACE jump &nbsp;•&nbsp; F / X / click = SHOOT<br>
+    On phone: left side = move arrows, right side = jump &amp; 🔫 gun (boss only)<br>
+    <span style="color:#e94560">Every 10th level is a BOSS — SHOOT it to death, then the door unlocks!</span><br>
+    <span style="color:#ffd34d">⚡ Levels 80, 90, 100 = 2x SPEED MODE!</span>
+  </p>
+</div>
+
+<!-- LEVEL SELECT -->
+<div id="levelSelect" class="screen hidden">
+  <h1 style="font-size:clamp(22px,6vw,34px)">SELECT LEVEL</h1>
+  <div id="levelGrid"></div>
+  <button class="small" onclick="backToMenu()">BACK</button>
+</div>
+
+<!-- SETTINGS -->
+<div id="settings" class="screen hidden">
+  <h1 style="font-size:clamp(22px,6vw,34px)">SETTINGS</h1>
+  <div class="setRow">
+    <span>🎵 Music</span>
+    <div class="vol">
+      <button class="vbtn" onclick="changeVol('music',-1)">-</button>
+      <b id="musicVal">50%</b>
+      <button class="vbtn" onclick="changeVol('music',1)">+</button>
+    </div>
+  </div>
+  <div class="setRow">
+    <span>🔊 Sound FX</span>
+    <div class="vol">
+      <button class="vbtn" onclick="changeVol('sfx',-1)">-</button>
+      <b id="sfxVal">70%</b>
+      <button class="vbtn" onclick="changeVol('sfx',1)">+</button>
+    </div>
+  </div>
+  <button class="small" id="resumeBtn" onclick="resumeGame()" style="display:none;">RESUME GAME</button>
+  <button class="small" onclick="backToMenu()">HOME</button>
+</div>
+
+<!-- WIN -->
+<div id="winScreen" class="screen hidden">
+  <h1>YOU BEAT IT 😈</h1>
+  <p class="sub">You survived all 100 traps and 10 bosses.</p>
+  <button onclick="backToMenu()">MENU</button>
+</div>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <span class="pill" id="lvlPill">Level: <b id="lvlNum">1</b></span>
+  <span class="pill">Lvl Deaths: <b id="lvlDeaths">0</b></span>
+  <span class="pill">Total: <b id="deaths">0</b></span>
+  <button id="watchAdBtn" style="display:none;" onclick="tryShowRewardedAd()">🎁 Ad</button>
+  <button onclick="openSettingsInGame()">⚙</button>
+  <button onclick="backToMenu()">MENU</button>
+</div>
+<div id="hint" class="hidden"></div>
+<div id="deathText"></div>
+
+<!-- Game Canvas Wrapper -->
+<div id="gameWrapper">
+  <canvas id="game" width="800" height="500"></canvas>
+</div>
+
+<!-- Touch controls -->
+<div id="touch">
+  <div id="leftControls">
+    <button class="ctrlBtn"
+      ontouchstart="touchMove('left',true);event.preventDefault()"
+      ontouchend="touchMove('left',false);event.preventDefault()"
+      ontouchcancel="touchMove('left',false);event.preventDefault()">◀</button>
+    <button class="ctrlBtn"
+      ontouchstart="touchMove('right',true);event.preventDefault()"
+      ontouchend="touchMove('right',false);event.preventDefault()"
+      ontouchcancel="touchMove('right',false);event.preventDefault()">▶</button>
+  </div>
+  <div id="rightControls">
+    <button class="ctrlBtn gun" id="gunBtn" style="display:none;"
+      ontouchstart="touchShoot();event.preventDefault()">🔫</button>
+    <button class="ctrlBtn jump"
+      ontouchstart="touchMove('up',true);event.preventDefault()"
+      ontouchend="touchMove('up',false);event.preventDefault()"
+      ontouchcancel="touchMove('up',false);event.preventDefault()">⬆</button>
+  </div>
+</div>
+
+<script>
+// ==================== CANVAS RESIZE ====================
+const cv  = document.getElementById('game');
+const ctx = cv.getContext('2d');
+const W = 800, H = 500;
+
+// Detect touch devices once — used everywhere for mobile-only behavior
+const IS_TOUCH = ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+
+// Use visualViewport when available — far more accurate on mobile browsers
+// (accounts for address bar show/hide, fullscreen mode, notches, etc.)
+function getViewportSize(){
+  if(window.visualViewport){
+    return { w: window.visualViewport.width, h: window.visualViewport.height };
+  }
+  return { w: window.innerWidth, h: window.innerHeight };
+}
+
+function resizeCanvas(){
+  const touchHeight = IS_TOUCH ? 150 : 0;
+  const vp = getViewportSize();
+  const availW = vp.w;
+  const availH = vp.h - touchHeight;
+  const scale  = Math.max(0, Math.min(availW / W, availH / H));
+  const displayW = Math.floor(W * scale);
+  const displayH = Math.floor(H * scale);
+  cv.style.width  = displayW + 'px';
+  cv.style.height = displayH + 'px';
+  const wrapper = document.getElementById('gameWrapper');
+  wrapper.style.height = Math.max(0, vp.h - touchHeight) + 'px';
+  updateRotateOverlay();
+}
+
+// Show a "rotate your device" hint on phones/tablets that are in portrait mode
+// (needed because iOS does not allow JS to force-lock screen orientation)
+function updateRotateOverlay(){
+  const el = document.getElementById('rotateOverlay');
+  if(!el) return;
+  const vp = getViewportSize();
+  if(IS_TOUCH && vp.h > vp.w){
+    el.classList.add('show');
+  } else {
+    el.classList.remove('show');
+  }
+}
+
+// Ask the browser to go fullscreen and lock to landscape.
+// Must be called from inside a user gesture (tap/click) or most browsers reject it.
+function requestFullscreenAndLock(){
+  if(!IS_TOUCH) return; // never force this on desktop/laptop
+  const el = document.documentElement;
+  const reqFS = el.requestFullscreen || el.webkitRequestFullscreen ||
+                el.mozRequestFullScreen || el.msRequestFullscreen;
+
+  const lockLandscape=()=>{
+    try{
+      if(screen.orientation && screen.orientation.lock){
+        screen.orientation.lock('landscape').catch(()=>{});
+      }
+    }catch(e){ /* orientation lock not supported (e.g. iOS Safari) — rotateOverlay covers this */ }
+  };
+
+  if(reqFS){
+    try{
+      const p = reqFS.call(el);
+      if(p && typeof p.then==='function') p.then(lockLandscape).catch(lockLandscape);
+      else lockLandscape();
+    }catch(e){ lockLandscape(); }
+  } else {
+    lockLandscape();
+  }
+  setTimeout(resizeCanvas, 100);
+}
+
+function scheduleResize(){
+  // Mobile browsers report window size a bit late after rotation/fullscreen changes,
+  // so we re-check a few times over the next second to make sure we catch the final size.
+  [0,100,300,600,1000].forEach(t=>setTimeout(resizeCanvas, t));
+}
+
+window.addEventListener('resize', resizeCanvas);
+window.addEventListener('orientationchange', scheduleResize);
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize', resizeCanvas);
+}
+['fullscreenchange','webkitfullscreenchange','mozfullscreenchange','MSFullscreenChange']
+  .forEach(evt=>document.addEventListener(evt, scheduleResize));
+if(screen.orientation && screen.orientation.addEventListener){
+  screen.orientation.addEventListener('change', scheduleResize);
+}
+
+resizeCanvas();
+
+// Touch detection — show touch controls, and try to go fullscreen+landscape
+// as soon as the player first touches the screen (counts as a user gesture).
+if (IS_TOUCH) {
+  document.getElementById('touch').style.display = 'flex';
+  resizeCanvas();
+  const firstTouchHandler=()=>{
+    requestFullscreenAndLock();
+    window.removeEventListener('touchend', firstTouchHandler);
+    window.removeEventListener('click', firstTouchHandler);
+  };
+  window.addEventListener('touchend', firstTouchHandler, {once:true});
+  window.addEventListener('click', firstTouchHandler, {once:true});
+}
+
+// ==================== SAVE / PROGRESS ====================
+const SAVE_KEY     = 'trapDevil_progress';
+const DEATH_KEY    = 'trapDevil_deaths';
+const LVLDEATH_KEY = 'trapDevil_lvlDeaths';
+const VOL_KEY      = 'trapDevil_vol';
+
+// Levels are locked and unlock progressively as the player clears them
+let maxUnlocked = parseInt(localStorage.getItem(SAVE_KEY) || '1');
+if (!Number.isFinite(maxUnlocked) || maxUnlocked < 1) maxUnlocked = 1;
+if (maxUnlocked > 100) maxUnlocked = 100;
+
+let totalDeaths = parseInt(localStorage.getItem(DEATH_KEY) || '0');
+if (!Number.isFinite(totalDeaths) || totalDeaths < 0) totalDeaths = 0;
+
+let levelDeaths = {};
+try { levelDeaths = JSON.parse(localStorage.getItem(LVLDEATH_KEY) || '{}') || {}; }
+catch(e){ levelDeaths = {}; }
+
+let volSettings = { music:5, sfx:7 };
+try { Object.assign(volSettings, JSON.parse(localStorage.getItem(VOL_KEY) || '{}')); }
+catch(e){}
+
+let currentLevel = 1;
+let running      = false;
+let frame        = 0;
+let settingsCameFromGame = false;
+let camX         = 0;
+
+const keys = { left:false, right:false, up:false };
+
+// Background stars
+const stars = [];
+for (let i=0;i<60;i++)
+  stars.push({x:Math.random()*W, y:Math.random()*H, s:Math.random()*2+0.5, tw:Math.random()*6});
+
+// ==================== SPEED BOOST ====================
+function isSpeedBoostLevel(n){ return n===80||n===90||n===100; }
+
+// ==================== AUDIO ====================
+let audioCtx=null, musicGain=null, sfxGain=null, musicTimer=null;
+
+function initAudio(){
+  if(audioCtx) return;
+  try{
+    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    musicGain = audioCtx.createGain();
+    sfxGain   = audioCtx.createGain();
+    musicGain.connect(audioCtx.destination);
+    sfxGain.connect(audioCtx.destination);
+    applyVolumes();
+  }catch(e){ audioCtx=null; }
+}
+
+function applyVolumes(){
+  if(!audioCtx) return;
+  musicGain.gain.value = volSettings.music/10 * 0.25;
+  sfxGain.gain.value   = volSettings.sfx/10   * 0.4;
+}
+
+function playTone(freq, dur, type='square', slideTo=null){
+  if(!audioCtx) return;
+  const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+  o.type=type; o.frequency.value=freq;
+  if(slideTo) o.frequency.linearRampToValueAtTime(slideTo, audioCtx.currentTime+dur);
+  g.gain.setValueAtTime(1, audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+dur);
+  o.connect(g); g.connect(sfxGain);
+  o.start(); o.stop(audioCtx.currentTime+dur);
+}
+
+const SFX = {
+  jump:    ()=>playTone(420,0.15,'square',720),
+  death:   ()=>playTone(300,0.4,'sawtooth',60),
+  win:     ()=>{
+    playTone(523,0.12,'triangle');
+    setTimeout(()=>playTone(659,0.12,'triangle'),120);
+    setTimeout(()=>playTone(784,0.2,'triangle'),240);
+  },
+  shoot:   ()=>playTone(900,0.08,'square',300),
+  bossHit: ()=>playTone(160,0.18,'sawtooth',90),
+  bossDie: ()=>{
+    playTone(200,0.3,'sawtooth',50);
+    setTimeout(()=>playTone(120,0.5,'square',40),200);
+  },
+};
+
+const MELODY=[262,330,392,330,294,349,440,349];
+let melIdx=0;
+
+function startMusic(){
+  if(!audioCtx||musicTimer) return;
+  melIdx=0;
+  musicTimer=setInterval(()=>{
+    if(!audioCtx) return;
+    const note=MELODY[melIdx%MELODY.length];
+    const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.type='triangle';
+    o.frequency.value=(level&&level.boss)?note*0.5:note;
+    g.gain.setValueAtTime(0.0001,audioCtx.currentTime);
+    g.gain.linearRampToValueAtTime(1,audioCtx.currentTime+0.02);
+    g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.35);
+    o.connect(g); g.connect(musicGain);
+    o.start(); o.stop(audioCtx.currentTime+0.36);
+    melIdx++;
+  },400);
+}
+
+function stopMusic(){
+  if(musicTimer){ clearInterval(musicTimer); musicTimer=null; }
+}
+
+// ==================== INPUT ====================
+function pressKey(dir, val){ keys[dir]=val; }
+
+function touchMove(dir,val){ initAudio(); resumeAudio(); pressKey(dir,val); }
+function touchShoot(){ initAudio(); resumeAudio(); shoot(); }
+function resumeAudio(){
+  if(audioCtx&&audioCtx.state==='suspended') audioCtx.resume();
+}
+
+addEventListener('keydown',e=>{
+  initAudio(); resumeAudio();
+  if(['ArrowLeft','a','A'].includes(e.key))   pressKey('left',true);
+  if(['ArrowRight','d','D'].includes(e.key))  pressKey('right',true);
+  if(['ArrowUp','w','W',' '].includes(e.key)){ pressKey('up',true); e.preventDefault(); }
+  if(['f','F','x','X'].includes(e.key)){ shoot(); e.preventDefault(); }
+});
+addEventListener('keyup',e=>{
+  if(['ArrowLeft','a','A'].includes(e.key))   pressKey('left',false);
+  if(['ArrowRight','d','D'].includes(e.key))  pressKey('right',false);
+  if(['ArrowUp','w','W',' '].includes(e.key)) pressKey('up',false);
+});
+
+cv.addEventListener('mousedown',e=>{
+  if(running){ initAudio(); resumeAudio(); shoot(); }
+});
+
+// ==================== HINTS / DEATH MSGS ====================
+const DEATH_MSGS=[
+  "OUCH. 💀","Told you not to trust it.","Skill issue 😏","Try again, champ.",
+  "The floor wins again.","Spiked! 🌵","Sliced like bread. 🍞","Crushed it. (It crushed you)",
+  "Gravity says hi. 👋","Decoy door got you. 🚪","RIP. Respawning...","So close. So dead.",
+  "The devil laughs. 😈","That's gonna leave a mark.","Nope. Try harder.","Fell into the void. 🕳️",
+];
+
+function isBossLevel(n){ return n%10===0; }
+
+function showHint(){
+  // Clears any hint text — hints are shown contextually via loadLevel
+  const el=document.getElementById('hint');
+  el.textContent='';
+}
+
+function showDeathText(){
+  const el=document.getElementById('deathText');
+  el.textContent=DEATH_MSGS[Math.floor(Math.random()*DEATH_MSGS.length)];
+  el.style.opacity='1';
+  setTimeout(()=>{ el.style.opacity='0'; },600);
+}
+
+// ==================== LEVEL GENERATION ====================
+function rng(seed){
+  let s=seed*9301+49297;
+  return function(){ s=(s*9301+49297)%233280; return s/233280; };
+}
+
+const TILE=40;
+const PLAYER_H=36;
+const JUMP_HEIGHT=90;
+
+function levelWidth(n){
+  if(isBossLevel(n)) return W;
+  return Math.round(W+(n)*90);
+}
+
+function isInPit(x, w, pits){
+  for(const p of pits){
+    if(x < p.x+p.w && x+w > p.x) return true;
+  }
+  return false;
+}
+
+function buildLevel(n){
+  const r=rng(n*7+13);
+  const LW=levelWidth(n);
+  const solids=[], fakeFloors=[], spikes=[], saws=[], crushers=[], movers=[], pits=[];
+  let fakeDoors=[], boss=null;
+  const superEasy=(n===9);
+  const easy=n<=8;
+  const easeFactor=easy?(n-1)/8:1;
+  const diff=Math.min(1,n/100);
+  const groundY=H-TILE;
+
+  // Walls and ceiling
+  solids.push({x:0,       y:groundY, w:LW,   h:TILE});
+  solids.push({x:0,       y:0,       w:TILE,  h:H});
+  solids.push({x:LW-TILE, y:0,       w:TILE,  h:H});
+  solids.push({x:0,       y:0,       w:LW,    h:TILE});
+
+  const start={x:60, y:groundY-40};
+  const door={x:LW-90, y:groundY-50, w:34, h:50};
+
+  // ---- BOSS LEVEL ----
+  if(isBossLevel(n)){
+    const bossTier=n/10;
+    solids.push({x:180, y:groundY-90,  w:110, h:18});
+    solids.push({x:430, y:groundY-150, w:110, h:18});
+    solids.push({x:300, y:groundY-220, w:120, h:18});
+
+    const bossSpeed=Math.min(3.2, 1.2+bossTier*0.18);
+    const slamPeriod=Math.max(110, 200-bossTier*9);
+
+    boss={
+      x:W/2-40, y:90, w:80, h:80,
+      hp: 5+bossTier*2,
+      maxHp: 5+bossTier*2,
+      vx: bossSpeed, vy:1,
+      slamTimer:0, slamming:false, slamY:0,
+      slamPeriod: slamPeriod,
+      eyeBlink:0, tier:bossTier, hitFlash:0,
+      invuln:0, dead:false
+    };
+    door.x=W-90;
+    door.y=groundY-50;
+    return {n,LW,solids,fakeFloors,spikes,saws,crushers,movers,pits,fakeDoors,start,door,groundY,boss,shaking:false,bossDefeated:false};
+  }
+
+  // ---- SUPER EASY (level 9 — calm before boss) ----
+  if(superEasy){
+    // A single easy hidden spike so it's not completely hazard-free
+    const midX=Math.floor(LW*0.55);
+    spikes.push({x:midX, y:groundY, w:32, h:22, hidden:true, rise:0, shake:false, phase:0, fast:false});
+    return {n,LW,solids,fakeFloors,spikes,saws,crushers,movers,pits,fakeDoors,start,door,groundY,boss:null,shaking:false,bossDefeated:false};
+  }
+
+  // ---- NORMAL LEVELS ----
+  const shaking=(!isBossLevel(n)&&n>5&&n%6===0);
+  const segments=Math.max(4, Math.floor((LW-200)/150));
+  let cursorX=140;
+  const solidSegments=[];
+
+  for(let i=0;i<segments;i++){
+    const segW=90+Math.floor(r()*80);
+    const isFake=i>0&&r()<(0.45+diff*0.35)*easeFactor;
+
+    if(isFake){
+      fakeFloors.push({x:cursorX, y:groundY, w:segW, h:TILE, triggered:false, t:0});
+    } else {
+      solids.push({x:cursorX, y:groundY, w:segW, h:TILE});
+      solidSegments.push({x:cursorX, w:segW});
+    }
+
+    if(!isFake&&i>1&&i<segments-1&&n>3&&r()<(0.30+diff*0.3)*easeFactor){
+      // Pit width kept safely within the player's actual max jump distance
+      // (verified by physics simulation: worst-case standing jump ≈108px,
+      // best-case full-run-up jump ≈122px) so no pit is ever impossible
+      // or requires frame-perfect timing.
+      const pitW=(easy?40:50)+Math.floor(r()*(easy?30:35));
+      const maxPitW=95;
+      pits.push({x:cursorX+segW+8, w:Math.min(pitW,maxPitW)});
+    }
+    cursorX+=segW+(24+Math.floor(r()*60));
+  }
+
+  // Rebuild ground with pit gaps
+  if(pits.length){
+    pits.sort((a,b)=>a.x-b.x);
+    const idx=solids.findIndex(s=>s.x===0&&s.y===groundY&&s.w===LW);
+    if(idx!==-1) solids.splice(idx,1);
+    let fx=0;
+    for(const p of pits){
+      const sw=p.x-fx;
+      if(sw>4) solids.push({x:fx, y:groundY, w:sw, h:TILE});
+      fx=p.x+p.w;
+    }
+    if(LW-fx>4) solids.push({x:fx, y:groundY, w:LW-fx, h:TILE});
+  }
+
+  const solidFloors=solids.filter(s=>s.y===groundY&&s.w>30);
+
+  // Spikes on solid segments
+  for(let i=0;i<solidSegments.length;i++){
+    const seg=solidSegments[i];
+    if(i===0) continue;
+
+    const floorTile=solidFloors.find(s=>s.x<=seg.x+10&&s.x+s.w>=seg.x+seg.w-10);
+    if(!floorTile) continue;
+
+    // Early levels get a guaranteed small baseline chance of spikes so they aren't
+    // completely hazard-free, while still ramping up smoothly with difficulty.
+    const spChance=(0.40+diff*0.35)*(easy?0.35*easeFactor+0.15:1);
+    if(r()>=spChance) continue;
+
+    const margin=20;
+    const maxSpW=Math.min(seg.w-margin*2,60);
+    if(maxSpW<10) continue;
+    const spW=10+Math.floor(r()*(maxSpW-10));
+    const spX=seg.x+margin+Math.floor(r()*(seg.w-margin*2-spW));
+
+    if(isInPit(spX,spW,pits)) continue;
+
+    const leftEdge=spX-60, rightEdge=spX+spW+60;
+    let leftClear=false, rightClear=false;
+    for(const s of solidFloors){
+      if(s.x+s.w>=leftEdge&&s.x<spX) leftClear=true;
+      if(s.x<=rightEdge&&s.x>spX+spW) rightClear=true;
+    }
+    if(!leftClear&&!rightClear) continue;
+
+    spikes.push({x:spX, y:groundY, w:spW, h:22, hidden:!shaking, rise:shaking?1:0, shake:shaking, phase:r()*6});
+  }
+
+  // Hidden spike near door
+  if(r()<(0.50+diff*0.25)*easeFactor){
+    const dSpX=door.x-55;
+    if(!isInPit(dSpX,36,pits)){
+      const doorFloor=solidFloors.find(s=>s.x<=dSpX&&s.x+s.w>=dSpX+36);
+      if(doorFloor){
+        spikes.push({x:dSpX, y:groundY, w:36, h:22, hidden:true, rise:0, shake:false, phase:0});
+      }
+    }
+  }
+
+  // Fake door trap
+  if(n>6&&r()<0.5){
+    const fdX=220+r()*(LW-450);
+    const fdY=groundY-50;
+    const fdFloor=solidFloors.find(s=>s.x<=fdX&&s.x+s.w>=fdX+34);
+    if(fdFloor&&!isInPit(fdX-3,40,pits)){
+      fakeDoors.push({x:fdX, y:fdY, w:34, h:50});
+      spikes.push({x:fdX-3, y:groundY, w:40, h:22, hidden:true, rise:0, fast:true, shake:false, phase:0});
+    }
+  }
+
+  // Saws
+  if(!easy&&n>12){
+    const sawCount=Math.floor((0.5+diff*2)*(0.5+r()));
+    for(let i=0;i<sawCount;i++){
+      const sx=200+r()*(LW-400);
+      const sy=groundY-(80+r()*100);
+      saws.push({
+        cx:sx, cy:sy, r:18,
+        range:30+r()*60,
+        axis:r()<0.5?'x':'y',
+        dir:1,
+        speed:Math.min(2.5, 0.8+diff*1.2),
+        a:0, x:sx, y:sy
+      });
+    }
+  }
+
+  // Crushers
+  if(!easy){
+    const crN=Math.floor((1+diff*2.5)*(0.5+r())*(LW/W));
+    for(let i=0;i<crN;i++){
+      const cx=200+r()*(LW-400);
+      crushers.push({x:cx, y:TILE, w:50, h:60, oy:TILE, range:100+r()*80, dir:1, speed:Math.min(3.5,1+diff*2)});
+    }
+  }
+
+  return {n,LW,solids,fakeFloors,spikes,saws,crushers,movers,pits,fakeDoors,start,door,groundY,boss:null,shaking,bossDefeated:false};
+}
+
+// ==================== PLAYER / PHYSICS ====================
+let level, player, particles, bullets, shootCooldown;
+
+function loadLevel(n){
+  currentLevel=n;
+  level=buildLevel(n);
+  player={
+    x:level.start.x, y:level.start.y,
+    w:28, h:36,
+    vx:0, vy:0,
+    onGround:false, facing:1,
+    anim:0, sx:1, sy:1, blink:0,
+    dead:false, won:false
+  };
+  particles=[]; bullets=[]; shootCooldown=0; camX=0;
+  keys.left=keys.right=keys.up=false;
+
+  document.getElementById('deaths').textContent=totalDeaths;
+  document.getElementById('lvlDeaths').textContent=(levelDeaths[n]||0);
+
+  const pill=document.getElementById('lvlPill');
+  const speedTag=isSpeedBoostLevel(n)?' ⚡2x':'';
+  if(isBossLevel(n)){
+    pill.classList.add('boss');
+    pill.innerHTML='👹 BOSS Lv: <b id="lvlNum">'+n+'</b>'+speedTag;
+  } else {
+    pill.classList.remove('boss');
+    pill.innerHTML='Level: <b id="lvlNum">'+n+'</b>'+speedTag;
+  }
+
+  const gunBtn=document.getElementById('gunBtn');
+  if(gunBtn) gunBtn.style.display=isBossLevel(n)?'flex':'none';
+
+  showHint();
+}
+
+// Physics constants
+const GRAV=0.7, JUMP=12, FRICTION=0.8;
+const BULLET_SPD=11, SHOOT_DELAY=14;
+
+function getSpeedMultiplier(){ return isSpeedBoostLevel(currentLevel)?2.0:1.0; }
+function getMOVE()   { return 0.9 *getSpeedMultiplier(); }
+function getMAXSPD() { return 4.6 *getSpeedMultiplier(); }
+
+function rectHit(a,b){
+  return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y;
+}
+
+function spawnParticles(x,y,n,c,spread=8){
+  for(let i=0;i<n;i++)
+    particles.push({x,y, vx:(Math.random()-0.5)*spread, vy:(Math.random()-0.5)*spread, life:1, c, size:Math.random()*4+2});
+}
+
+function shoot(){
+  if(!running||!player||player.dead||player.won) return;
+  if(!level||!level.boss) return;
+  if(shootCooldown>0) return;
+  shootCooldown=SHOOT_DELAY;
+  const dir=player.facing;
+  bullets.push({x:player.x+player.w/2+dir*16, y:player.y+player.h*0.45, vx:BULLET_SPD*dir, w:10, h:6, dead:false});
+  SFX.shoot();
+  spawnParticles(player.x+player.w/2+dir*16, player.y+player.h*0.45, 4,'#ffd34d',4);
+}
+
+function die(){
+  if(player.dead) return;
+  totalDeaths++;
+  levelDeaths[currentLevel]=(levelDeaths[currentLevel]||0)+1;
+  localStorage.setItem(DEATH_KEY, totalDeaths);
+  localStorage.setItem(LVLDEATH_KEY, JSON.stringify(levelDeaths));
+  document.getElementById('deaths').textContent=totalDeaths;
+  document.getElementById('lvlDeaths').textContent=levelDeaths[currentLevel];
+  spawnParticles(player.x+player.w/2, player.y+player.h/2, 24,'#e94560',9);
+  showDeathText();
+  SFX.death();
+  player.dead=true;
+  setTimeout(()=>{ if(running) loadLevel(currentLevel); },600);
+}
+
+// ==================== NATIVE AD BRIDGE (no-op outside the Android app) ====================
+// The Android app injects a window.AndroidAds object via addJavascriptInterface.
+// These calls are always guarded, so the game works exactly the same in a
+// normal browser/PWA where no such bridge exists.
+function tryShowInterstitialAd(){
+  try{
+    if(window.AndroidAds && typeof AndroidAds.showInterstitial==='function'){
+      AndroidAds.showInterstitial();
+    }
+  }catch(e){}
+}
+function tryShowRewardedAd(){
+  try{
+    if(window.AndroidAds && typeof AndroidAds.showRewarded==='function'){
+      AndroidAds.showRewarded();
+    }
+  }catch(e){}
+}
+// Called by the native app after the user finishes watching a rewarded ad
+window.onAdRewardEarned = function(){
+  totalDeaths = Math.max(0, totalDeaths-1);
+  localStorage.setItem(DEATH_KEY, totalDeaths);
+  const el=document.getElementById('deaths');
+  if(el) el.textContent=totalDeaths;
+  const msg=document.getElementById('deathText');
+  if(msg){
+    msg.textContent='🎁 Reward earned! -1 death';
+    msg.style.opacity='1';
+    setTimeout(()=>{ msg.style.opacity='0'; },900);
+  }
+};
+
+function nextLevel(){
+  if(currentLevel>=100){
+    running=false; stopMusic();
+    document.getElementById('hud').classList.add('hidden');
+    document.getElementById('hint').classList.add('hidden');
+    document.getElementById('winScreen').classList.remove('hidden');
+    return;
+  }
+  // Show an interstitial right after a boss is cleared — a natural break point
+  if(isBossLevel(currentLevel)) tryShowInterstitialAd();
+  spawnParticles(level.door.x, level.door.y, 30,'#4ad991',8);
+  SFX.win();
+  player.won=true;
+  const next=currentLevel+1;
+  if(next>maxUnlocked){
+    maxUnlocked=next;
+    localStorage.setItem(SAVE_KEY, maxUnlocked);
+  }
+  setTimeout(()=>{ if(running) loadLevel(next); },350);
+}
+
+// ==================== UPDATE ====================
+function update(){
+  frame++;
+  if(shootCooldown>0) shootCooldown--;
+  stars.forEach(s=>{ s.tw+=0.04; });
+
+  if(!player.dead&&!player.won){
+    player.anim+=0.2;
+    player.blink=Math.max(0,player.blink-1);
+    if(Math.random()<0.01) player.blink=8;
+    player.sx+=(1-player.sx)*0.2;
+    player.sy+=(1-player.sy)*0.2;
+
+    const MOVE=getMOVE();
+    const MAXSPD=getMAXSPD();
+
+    if(keys.left)  { player.vx-=MOVE; player.facing=-1; }
+    if(keys.right) { player.vx+=MOVE; player.facing=1;  }
+    player.vx*=FRICTION;
+    if(player.vx> MAXSPD) player.vx= MAXSPD;
+    if(player.vx<-MAXSPD) player.vx=-MAXSPD;
+
+    player.vy+=GRAV;
+
+    if(keys.up&&player.onGround){
+      player.vy=-JUMP;
+      player.onGround=false;
+      player.sx=0.7; player.sy=1.3;
+      spawnParticles(player.x+player.w/2, player.y+player.h, 6,'rgba(255,255,255,.5)',4);
+      SFX.jump();
+    }
+
+    const wasOnGround=player.onGround;
+    player.onGround=false;
+
+    // Build solid list for this frame
+    // Only add fakeFloors that haven't been triggered yet
+    const solidsNow=level.solids.slice();
+    level.movers.forEach(m=>solidsNow.push(m));
+    level.crushers.forEach(c=>solidsNow.push(c));
+    level.fakeFloors.forEach(f=>{ if(!f.triggered) solidsNow.push(f); });
+
+    // Horizontal movement
+    player.x+=player.vx;
+    for(const s of solidsNow){
+      if(rectHit(player,s)){
+        if(player.vx>0) player.x=s.x-player.w;
+        else if(player.vx<0) player.x=s.x+s.w;
+        player.vx=0;
+      }
+    }
+
+    // Vertical movement
+    player.y+=player.vy;
+    for(const s of solidsNow){
+      if(rectHit(player,s)){
+        if(player.vy>0){
+          player.y=s.y-player.h;
+          player.onGround=true;
+          if(!wasOnGround&&Math.abs(player.vy)>6){
+            player.sx=1.3; player.sy=0.7;
+            spawnParticles(player.x+player.w/2, player.y+player.h, 5,'rgba(255,255,255,.4)',3);
+          }
+          player.vy=0;
+          // Trigger fake floor on land
+          if(s.triggered===false&&level.fakeFloors.includes(s)){
+            s.triggered=true; s.t=0;
+          }
+        } else if(player.vy<0){
+          player.y=s.y+s.h;
+          player.vy=0;
+        }
+      }
+    }
+
+    // Dust on walk
+    if(player.onGround&&Math.abs(player.vx)>2&&frame%5===0)
+      spawnParticles(player.x+player.w/2, player.y+player.h, 2,'rgba(200,200,255,.3)',2);
+
+    // Animate fake floors falling
+    level.fakeFloors.forEach(f=>{ if(f.triggered) f.t+=0.06; });
+
+    // Spike rise logic
+    level.spikes.forEach(sp=>{
+      if(sp.shake){
+        sp.rise=1;
+        sp.phase+=0.25;
+      } else if(sp.hidden){
+        const spMidX=sp.x+sp.w/2;
+        const plMidX=player.x+player.w/2;
+        const near=Math.abs(plMidX-spMidX)<90&&Math.abs((player.y+player.h)-sp.y)<120;
+        if(near) sp.rise=Math.min(1,sp.rise+(sp.fast?0.18:0.10));
+        else     sp.rise=Math.max(0,sp.rise-0.04);
+      } else {
+        sp.rise=1;
+      }
+    });
+
+    // Crushers
+    level.crushers.forEach(c=>{
+      c.y+=c.dir*c.speed*2.0;
+      if(c.y>c.oy+c.range){ c.y=c.oy+c.range; c.dir=-1; spawnParticles(c.x+c.w/2,c.y+c.h,6,'#922',5); }
+      if(c.y<c.oy){ c.y=c.oy; c.dir=1; }
+    });
+
+    // Saws
+    level.saws.forEach(s=>{
+      s.a+=0.15;
+      if(s.axis==='x'){ s.x=s.cx+Math.sin(s.a*0.5*s.speed)*s.range; s.y=s.cy; }
+      else             { s.y=s.cy+Math.sin(s.a*0.5*s.speed)*s.range; s.x=s.cx; }
+    });
+
+    // Boss AI
+    if(level.boss&&!level.boss.dead){
+      const b=level.boss;
+      b.eyeBlink=Math.max(0,b.eyeBlink-1);
+      if(Math.random()<0.01) b.eyeBlink=10;
+      b.hitFlash=Math.max(0,b.hitFlash-1);
+      b.invuln  =Math.max(0,b.invuln-1);
+
+      const targetX=player.x+player.w/2-b.w/2;
+      b.x+=Math.sign(targetX-b.x)*b.vx;
+      b.x=Math.max(TILE, Math.min(W-TILE-b.w, b.x));
+
+      b.slamTimer++;
+      if(!b.slamming&&b.slamTimer>b.slamPeriod){
+        b.slamming=true; b.slamTimer=0; b.slamY=b.y;
+      }
+      if(b.slamming){
+        b.y+=9;
+        if(b.y>level.groundY-b.h){
+          b.y=level.groundY-b.h; b.slamming=false;
+          spawnParticles(b.x+b.w/2, b.y+b.h, 18,'#b22',10);
+        }
+      } else {
+        b.y+=(90-b.y)*0.04;
+      }
+
+      if(rectHit(player,b)) die();
+    }
+
+    // Bullets
+    for(const bl of bullets){
+      bl.x+=bl.vx;
+      if(level.boss&&!level.boss.dead){
+        const b=level.boss;
+        if(rectHit({x:bl.x,y:bl.y,w:bl.w,h:bl.h},b)){
+          if(b.invuln<=0){
+            b.hp--; b.hitFlash=10; b.invuln=12;
+            spawnParticles(bl.x, bl.y, 14,'#ffea00',8);
+            SFX.bossHit();
+            if(b.hp<=0){
+              b.dead=true; level.bossDefeated=true;
+              spawnParticles(b.x+b.w/2, b.y+b.h/2, 40,'#e94560',12);
+              SFX.bossDie();
+            }
+          }
+          bl.dead=true;
+        }
+      }
+      if(!bl.dead){
+        for(const s of level.solids){
+          if(rectHit({x:bl.x,y:bl.y,w:bl.w,h:bl.h},s)){
+            bl.dead=true;
+            spawnParticles(bl.x,bl.y,4,'#ffd34d',4);
+            break;
+          }
+        }
+      }
+      if(bl.x<-20||bl.x>level.LW+20) bl.dead=true;
+    }
+    bullets=bullets.filter(b=>!b.dead);
+
+    // Spike collision
+    for(const sp of level.spikes){
+      if(sp.rise<=0.02) continue;
+      const sh=sp.h*sp.rise;
+      const box={x:sp.x, y:sp.y-sh, w:sp.w, h:sh};
+      if(sp.shake){ box.x+=Math.sin(sp.phase)*6; box.y+=Math.cos(sp.phase)*3; }
+      if(rectHit(player,box)){ die(); break; }
+    }
+
+    // Saw collision
+    if(!player.dead){
+      for(const s of level.saws){
+        const dx=(player.x+player.w/2)-s.x, dy=(player.y+player.h/2)-s.y;
+        if(Math.hypot(dx,dy)<s.r+12){ die(); break; }
+      }
+    }
+
+    // Void / ceiling fall
+    if(!player.dead&&(player.y>H+60||player.y<-60)) die();
+
+    // Door check
+    if(!player.dead&&!player.won&&rectHit(player,level.door)){
+      if(!(level.boss&&!level.bossDefeated)) nextLevel();
+    }
+  }
+
+  // Camera
+  const targetCam=Math.max(0, Math.min(level.LW-W, player.x+player.w/2-W/2));
+  camX+=(targetCam-camX)*0.12;
+
+  // Particles
+  particles.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.25; p.life-=0.03; });
+  particles=particles.filter(p=>p.life>0);
+}
+
+// ==================== RENDER ====================
+function rrect(x,y,w,h,r=6){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y, x+w,y+h, r);
+  ctx.arcTo(x+w,y+h, x,y+h, r);
+  ctx.arcTo(x,y+h, x,y, r);
+  ctx.arcTo(x,y, x+w,y, r);
+  ctx.closePath(); ctx.fill();
+}
+
+function draw(){
+  if(!level||!player) return;
+
+  // Background
+  const bg=ctx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#1a1a3a'); bg.addColorStop(1,'#0f1530');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+
+  if(level.boss)    { ctx.fillStyle='rgba(120,10,30,'+(0.06+Math.sin(frame*0.05)*0.03)+')'; ctx.fillRect(0,0,W,H); }
+  if(level.shaking) { ctx.fillStyle='rgba(200,120,30,'+(0.04+Math.sin(frame*0.1)*0.03)+')'; ctx.fillRect(0,0,W,H); }
+
+  if(isSpeedBoostLevel(currentLevel)){
+    ctx.fillStyle='rgba(255,211,77,'+(0.03+Math.sin(frame*0.12)*0.02)+')';
+    ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle='rgba(255,211,77,0.12)';
+    ctx.lineWidth=1;
+    for(let i=0;i<8;i++){
+      const ly=(frame*3+i*62)%H;
+      ctx.beginPath(); ctx.moveTo(0,ly); ctx.lineTo(30+Math.random()*40,ly); ctx.stroke();
+    }
+  }
+
+  // Stars
+  stars.forEach(s=>{
+    ctx.globalAlpha=0.3+Math.sin(s.tw)*0.3;
+    ctx.fillStyle='#fff';
+    ctx.fillRect(s.x,s.y,s.s,s.s);
+  });
+  ctx.globalAlpha=1;
+
+  ctx.save();
+  ctx.translate(-camX,0);
+
+  // Grid lines
+  ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.lineWidth=1;
+  for(let x=0;x<level.LW;x+=40){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for(let y=0;y<H;y+=40)        { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(level.LW,y); ctx.stroke(); }
+
+  // Pit glow
+  if(level.pits) level.pits.forEach(p=>{
+    const grad=ctx.createLinearGradient(0,H-TILE,0,H);
+    grad.addColorStop(0,'rgba(233,69,96,0.0)');
+    grad.addColorStop(1,'rgba(233,69,96,0.25)');
+    ctx.fillStyle=grad; ctx.fillRect(p.x,H-TILE,p.w,TILE);
+  });
+
+  // Solid platforms
+  level.solids.forEach(s=>{
+    ctx.fillStyle='#0f3460'; rrect(s.x,s.y,s.w,s.h,4);
+    ctx.fillStyle='rgba(90,150,220,0.25)'; ctx.fillRect(s.x+2,s.y+2,s.w-4,3);
+  });
+
+  // Fake floors
+  level.fakeFloors.forEach(f=>{
+    if(f.triggered&&f.t>1) return;
+    const alpha=f.triggered?Math.max(0,1-f.t):1;
+    ctx.globalAlpha=alpha;
+    ctx.fillStyle=f.triggered?'#e94560':'#0f3460';
+    rrect(f.x, f.y+(f.triggered?f.t*30:0), f.w, f.h, 4);
+    if(!f.triggered){
+      ctx.fillStyle='rgba(255,255,255,'+(0.05+Math.sin(frame*0.08+f.x)*0.04)+')';
+      ctx.fillRect(f.x+2,f.y+2,f.w-4,3);
+    }
+    ctx.globalAlpha=1;
+  });
+
+  // Crushers
+  level.crushers.forEach(c=>{
+    ctx.fillStyle='#c0392b'; rrect(c.x,c.y,c.w,c.h,4);
+    ctx.fillStyle='rgba(255,255,255,0.2)'; ctx.fillRect(c.x+3,c.y+3,c.w-6,3);
+    ctx.fillStyle='#7a1f15';
+    for(let i=0;i<c.w;i+=12){
+      ctx.beginPath();
+      ctx.moveTo(c.x+i, c.y+c.h);
+      ctx.lineTo(c.x+i+6, c.y+c.h+8);
+      ctx.lineTo(c.x+i+12, c.y+c.h);
+      ctx.fill();
+    }
+  });
+
+  // Spikes
+  level.spikes.forEach(sp=>{
+    if(sp.rise<=0.02) return;
+    const sh=sp.h*sp.rise;
+    let ox=0, oy=0;
+    if(sp.shake){ ox=Math.sin(sp.phase)*6; oy=Math.cos(sp.phase)*3; }
+    const baseY=sp.y+oy;
+    const tipY =sp.y-sh+oy;
+    const count=Math.max(1,Math.floor(sp.w/14));
+    const sw=sp.w/count;
+    for(let i=0;i<count;i++){
+      const sx=sp.x+i*sw+ox;
+      const grd=ctx.createLinearGradient(sx,tipY,sx,baseY);
+      grd.addColorStop(0,sp.shake?'#ffb347':'#fff');
+      grd.addColorStop(1,'#888');
+      ctx.fillStyle=grd;
+      ctx.beginPath();
+      ctx.moveTo(sx,baseY);
+      ctx.lineTo(sx+sw/2,tipY);
+      ctx.lineTo(sx+sw,baseY);
+      ctx.closePath(); ctx.fill();
+    }
+  });
+
+  // Saws
+  level.saws.forEach(s=>{
+    ctx.save();
+    ctx.translate(s.x,s.y); ctx.rotate(s.a);
+    ctx.shadowColor='#fff'; ctx.shadowBlur=12;
+    ctx.fillStyle='#e8e8e8';
+    ctx.beginPath();
+    for(let i=0;i<12;i++){
+      const a=i/12*Math.PI*2;
+      const rr=i%2?s.r:s.r+6;
+      ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.fillStyle='#666'; ctx.beginPath(); ctx.arc(0,0,5,0,7); ctx.fill();
+    ctx.restore();
+  });
+
+  // Fake doors
+  level.fakeDoors.forEach(fd=>{
+    ctx.fillStyle='#5d4037'; rrect(fd.x,fd.y,fd.w,fd.h,4);
+    ctx.fillStyle='#4a3228'; ctx.fillRect(fd.x+4,fd.y+6,fd.w-8,fd.h-12);
+    ctx.fillStyle='#ffd700'; ctx.beginPath(); ctx.arc(fd.x+fd.w-8,fd.y+fd.h/2,3,0,7); ctx.fill();
+  });
+
+  // Boss
+  if(level.boss&&!level.boss.dead){
+    const b=level.boss;
+    ctx.save();
+    ctx.shadowColor='#e94560'; ctx.shadowBlur=b.slamming?25:14;
+    if(b.invuln>0&&frame%6<3) ctx.globalAlpha=0.5;
+    ctx.fillStyle=b.hitFlash>0?'#fff':'#8a1030';
+    rrect(b.x,b.y,b.w,b.h,14);
+    ctx.shadowBlur=0;
+    // Horns
+    ctx.fillStyle='#5a0a20';
+    ctx.beginPath(); ctx.moveTo(b.x+12,b.y+5); ctx.lineTo(b.x+4,b.y-14); ctx.lineTo(b.x+24,b.y+5); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(b.x+b.w-12,b.y+5); ctx.lineTo(b.x+b.w-4,b.y-14); ctx.lineTo(b.x+b.w-24,b.y+5); ctx.fill();
+    // Eyes
+    if(b.eyeBlink<=0){
+      ctx.fillStyle='#ffea00';
+      ctx.beginPath(); ctx.arc(b.x+b.w*0.32,b.y+b.h*0.4,9,0,7); ctx.fill();
+      ctx.beginPath(); ctx.arc(b.x+b.w*0.68,b.y+b.h*0.4,9,0,7); ctx.fill();
+      ctx.fillStyle='#a00';
+      const look=Math.sign((player.x+player.w/2)-(b.x+b.w/2))*3;
+      ctx.beginPath(); ctx.arc(b.x+b.w*0.32+look,b.y+b.h*0.4,4,0,7); ctx.fill();
+      ctx.beginPath(); ctx.arc(b.x+b.w*0.68+look,b.y+b.h*0.4,4,0,7); ctx.fill();
+    } else {
+      ctx.strokeStyle='#ffea00'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(b.x+b.w*0.24,b.y+b.h*0.4); ctx.lineTo(b.x+b.w*0.40,b.y+b.h*0.4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(b.x+b.w*0.60,b.y+b.h*0.4); ctx.lineTo(b.x+b.w*0.76,b.y+b.h*0.4); ctx.stroke();
+    }
+    // Mouth
+    ctx.fillStyle='#300'; ctx.fillRect(b.x+b.w*0.28,b.y+b.h*0.65,b.w*0.44,8);
+    ctx.fillStyle='#fff';
+    for(let i=0;i<5;i++) ctx.fillRect(b.x+b.w*0.28+i*(b.w*0.44/5),b.y+b.h*0.65,3,5);
+    ctx.globalAlpha=1;
+    ctx.restore();
+  }
+
+  // Bullets
+  bullets.forEach(bl=>{
+    ctx.shadowColor='#ffd34d'; ctx.shadowBlur=10;
+    ctx.fillStyle='#fff3b0';
+    rrect(bl.x,bl.y,bl.w,bl.h,3);
+    ctx.shadowBlur=0;
+  });
+
+  // Door
+  const d=level.door;
+  const locked=level.boss&&!level.bossDefeated;
+  ctx.shadowColor=locked?'#888':'#4ad991';
+  ctx.shadowBlur=15+Math.sin(frame*0.1)*5;
+  ctx.fillStyle=locked?'#556':'#4ad991'; rrect(d.x,d.y,d.w,d.h,4);
+  ctx.shadowBlur=0;
+  ctx.fillStyle=locked?'#334':'#2a9d6f'; ctx.fillRect(d.x+4,d.y+6,d.w-8,d.h-12);
+  ctx.fillStyle='#ffd700'; ctx.beginPath(); ctx.arc(d.x+d.w-8,d.y+d.h/2,3,0,7); ctx.fill();
+  if(locked){
+    ctx.fillStyle='#fff'; ctx.font='14px Arial'; ctx.textAlign='center';
+    ctx.fillText('🔒',d.x+d.w/2,d.y+d.h/2+5); ctx.textAlign='left';
+  }
+
+  // Player
+  if(!player.dead){
+    ctx.save();
+    const px=player.x, py=player.y;
+    const bob=player.onGround?Math.sin(player.anim)*1.5:0;
+    const cx=px+player.w/2, cy=py+player.h/2+bob;
+    ctx.translate(cx,cy); ctx.scale(player.sx,player.sy); ctx.translate(-cx,-cy);
+
+    ctx.shadowColor=player.won?'#4ad991':'#f5d142';
+    ctx.shadowBlur=isSpeedBoostLevel(currentLevel)?(16+Math.sin(frame*0.3)*6):10;
+    ctx.fillStyle=player.won?'#4ad991':'#f5d142';
+    rrect(px,py+bob,player.w,player.h,8);
+    ctx.shadowBlur=0;
+
+    // Legs
+    ctx.fillStyle=player.won?'#2a9d6f':'#c9a82e';
+    const walk=(player.onGround&&Math.abs(player.vx)>1)?Math.sin(player.anim*1.5)*4:0;
+    ctx.fillRect(px+5,   py+player.h+bob, 7, 5+walk);
+    ctx.fillRect(px+player.w-12, py+player.h+bob, 7, 5-walk);
+
+    // Gun (boss levels)
+    if(!player.won&&level.boss){
+      const gy=py+player.h*0.45+bob;
+      ctx.fillStyle='#444';
+      if(player.facing>0) ctx.fillRect(px+player.w-4, gy, 14, 6);
+      else                ctx.fillRect(px-10, gy, 14, 6);
+      ctx.fillStyle='#888';
+      if(player.facing>0) ctx.fillRect(px+player.w-2, gy+1, 9, 2);
+      else                ctx.fillRect(px-7, gy+1, 9, 2);
+    }
+
+    // Eyes
+    ctx.fillStyle='#000';
+    const ex=player.facing>0?px+player.w-14:px+6;
+    const eh=player.blink>0?2:7;
+    ctx.fillRect(ex,py+11+bob,5,eh);
+    ctx.fillRect(ex+(player.facing>0?9:-9),py+11+bob,5,eh);
+    if(player.blink<=0){
+      ctx.fillStyle='#fff';
+      ctx.fillRect(ex+1+player.facing,py+12+bob,2,3);
+    }
+    ctx.restore();
+  }
+
+  // Particles
+  particles.forEach(p=>{
+    ctx.globalAlpha=Math.max(0,p.life);
+    ctx.fillStyle=p.c;
+    const sz=p.size||5;
+    ctx.fillRect(p.x-sz/2,p.y-sz/2,sz,sz);
+  });
+  ctx.globalAlpha=1;
+
+  ctx.restore(); // end camera transform
+
+  // Boss HP bar (screen space)
+  if(level.boss&&!level.boss.dead){
+    const b=level.boss;
+    ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(W/2-110,40,220,14);
+    ctx.fillStyle='#e94560';
+    ctx.fillRect(W/2-108,42,216*(b.hp/b.maxHp),10);
+    ctx.fillStyle='#fff'; ctx.font='bold 11px Arial'; ctx.textAlign='center';
+    ctx.fillText('BOSS HP — SHOOT IT!',W/2,51); ctx.textAlign='left';
+  }
+  if(level.boss&&level.bossDefeated){
+    ctx.fillStyle='#4ad991'; ctx.font='bold 16px Arial'; ctx.textAlign='center';
+    ctx.fillText('BOSS DEFEATED! Reach the door →',W/2,50); ctx.textAlign='left';
+  }
+
+  // Speed boost banner
+  if(isSpeedBoostLevel(currentLevel)){
+    ctx.save();
+    ctx.font='bold 13px Arial'; ctx.textAlign='center';
+    ctx.fillStyle='rgba(0,0,0,0.55)';
+    ctx.fillRect(W/2-52,6,104,22);
+    ctx.fillStyle='#ffd34d';
+    ctx.fillText('⚡ 2x SPEED MODE ⚡',W/2,21);
+    ctx.textAlign='left';
+    ctx.restore();
+  }
+}
+
+// ==================== GAME LOOP ====================
+let lastTime=0, accumulator=0;
+const STEP=1000/60, MAX_ACCUM=STEP*5;
+
+function loop(now){
+  if(!lastTime) lastTime=now;
+  let dt=now-lastTime; lastTime=now;
+  if(running){
+    if(dt>250) dt=STEP;
+    accumulator+=dt;
+    if(accumulator>MAX_ACCUM) accumulator=MAX_ACCUM;
+    let steps=0;
+    while(accumulator>=STEP&&steps<5){
+      update(); accumulator-=STEP; steps++;
+      if(!running) break;
+    }
+    if(running) draw();
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ==================== UI FUNCTIONS ====================
+function show(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.add('hidden'));
+  if(id) document.getElementById(id).classList.remove('hidden');
+}
+
+function startGame(n){
+  if(n>maxUnlocked) n=maxUnlocked; // can't jump into a locked level
+  if(n<1) n=1;
+  initAudio(); resumeAudio(); applyVolumes();
+  requestFullscreenAndLock();
+  stopMusic(); // stop any leftover music first
+  running=true; lastTime=0; accumulator=0; settingsCameFromGame=false;
+  show(null);
+  document.getElementById('hud').classList.remove('hidden');
+  loadLevel(n);
+  startMusic();
+}
+
+function startFromSaved(){
+  startGame(maxUnlocked);
+}
+
+function backToMenu(){
+  running=false; stopMusic(); settingsCameFromGame=false;
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('hint').classList.add('hidden');
+  document.getElementById('resumeBtn').style.display='none';
+  show('menu');
+}
+
+function showLevels(){
+  show('levelSelect');
+  const grid=document.getElementById('levelGrid');
+  grid.innerHTML='';
+  for(let i=1;i<=100;i++){
+    const b=document.createElement('button');
+    let cls='lvBtn';
+    const locked=i>maxUnlocked;
+    if(isBossLevel(i))  cls+=' boss';
+    if(levelDeaths[i])  cls+=' cleared';
+    if(locked)          cls+=' locked';
+    b.className=cls;
+    if(locked){
+      b.innerHTML='🔒';
+      b.disabled=true;
+    } else {
+      const speedMark=isSpeedBoostLevel(i)?'⚡':'';
+      const label=isBossLevel(i)?'👹'+i:''+i;
+      b.innerHTML=speedMark+label+(levelDeaths[i]?'<br><span style="font-size:9px;color:#ffb;">💀'+levelDeaths[i]+'</span>':'');
+      b.onclick=()=>startGame(i);
+    }
+    grid.appendChild(b);
+  }
+}
+
+function resetProgress(){
+  if(confirm('Reset all progress? Levels will lock again starting from Level 1.')){
+    totalDeaths=0; levelDeaths={}; maxUnlocked=1;
+    localStorage.setItem(DEATH_KEY,0);
+    localStorage.setItem(LVLDEATH_KEY,'{}');
+    localStorage.setItem(SAVE_KEY,1);
+    alert('Progress reset! Levels are locked again — start from Level 1.');
+  }
+}
+
+function refreshVolLabels(){
+  document.getElementById('musicVal').textContent=volSettings.music*10+'%';
+  document.getElementById('sfxVal').textContent=volSettings.sfx*10+'%';
+}
+
+function showSettings(){
+  initAudio(); refreshVolLabels(); settingsCameFromGame=false;
+  document.getElementById('resumeBtn').style.display='none';
+  show('settings');
+}
+
+function openSettingsInGame(){
+  running=false; stopMusic();
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('hint').classList.add('hidden');
+  settingsCameFromGame=true;
+  document.getElementById('resumeBtn').style.display='inline-block';
+  refreshVolLabels(); show('settings');
+}
+
+function resumeGame(){
+  if(!settingsCameFromGame) return;
+  running=true; lastTime=0; accumulator=0; settingsCameFromGame=false;
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('hint').classList.remove('hidden');
+  document.getElementById('resumeBtn').style.display='none';
+  show(null);
+  stopMusic(); startMusic(); // restart cleanly
+}
+
+function changeVol(kind,dir){
+  initAudio();
+  volSettings[kind]=Math.max(0,Math.min(10,volSettings[kind]+dir));
+  localStorage.setItem(VOL_KEY,JSON.stringify(volSettings));
+  applyVolumes(); refreshVolLabels();
+}
+
+// ==================== PWA: INSTALL AS APP ====================
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+  });
+}
+
+let deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  const btn = document.getElementById('installBtn');
+  if (btn) btn.style.display = 'inline-block';
+});
+
+function installApp() {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  deferredInstallPrompt.userChoice.finally(() => {
+    deferredInstallPrompt = null;
+    const btn = document.getElementById('installBtn');
+    if (btn) btn.style.display = 'none';
+  });
+}
+
+window.addEventListener('appinstalled', () => {
+  const btn = document.getElementById('installBtn');
+  if (btn) btn.style.display = 'none';
+  deferredInstallPrompt = null;
+});
+
+// iOS Safari has no install prompt API — show a manual instruction instead
+(function showIOSInstallHintIfNeeded(){
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.navigator.standalone === true ||
+                        window.matchMedia('(display-mode: standalone)').matches;
+  if (isIOS && !isStandalone) {
+    const hint = document.getElementById('iosInstallHint');
+    if (hint) hint.style.display = 'block';
+  }
+})();
+
+// Reveal the in-game "Watch Ad" button only when the native Android wrapper
+// has injected its ad bridge (window.AndroidAds) — invisible in plain browser/PWA.
+(function revealWatchAdButtonIfNative(){
+  const check=()=>{
+    const btn=document.getElementById('watchAdBtn');
+    if(btn) btn.style.display = window.AndroidAds ? 'inline-block' : 'none';
+  };
+  check();
+  setTimeout(check, 500); // bridge is injected right after WebView creation, give it a moment
+})();
+</script>
+</body>
+</html>
